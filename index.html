@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fleet Tracker — International Pipe & Supply</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f8f7f4;color:#1a1916;font-size:14px}
+.topbar{background:#fff;border-bottom:1px solid #e5e2db;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+.app-title{font-size:16px;font-weight:600;margin-right:4px}
+.filter-btn{border:1px solid #e5e2db;background:transparent;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:#444}
+.filter-btn.active{background:#1a1916;color:#fff;border-color:#1a1916}
+.tabs{background:#fff;border-bottom:1px solid #e5e2db;padding:0 20px;display:flex}
+.tab{padding:10px 16px;font-size:13px;cursor:pointer;border:none;border-bottom:2px solid transparent;background:transparent;color:#888}
+.tab.active{color:#1a1916;border-bottom-color:#1a1916;font-weight:500}
+.content{padding:20px;max-width:1200px;margin:0 auto}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.metric{background:#fff;border:1px solid #e5e2db;border-radius:12px;padding:14px}
+.metric-label{font-size:11px;color:#888;margin-bottom:6px}
+.metric-val{font-size:24px;font-weight:600}
+.metric-val.red{color:#dc2626}
+.metric-val.amber{color:#d97706}
+.card{background:#fff;border:1px solid #e5e2db;border-radius:12px;overflow:hidden;margin-bottom:16px}
+.card-header{padding:14px 18px;border-bottom:1px solid #f0ede8;display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:13px;font-weight:500}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500;border-bottom:1px solid #f0ede8;white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid #f8f6f2;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf8}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
+.badge-ok{background:#dcfce7;color:#166534}
+.badge-warn{background:#fef3c7;color:#92400e}
+.badge-danger{background:#fee2e2;color:#991b1b}
+.badge-gray{background:#f3f4f6;color:#6b7280}
+.btn{border:1px solid #e5e2db;background:transparent;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:#444;display:inline-flex;align-items:center;gap:4px}
+.btn:hover{background:#f8f7f4}
+.btn-primary{background:#1a1916;color:#fff;border-color:#1a1916}
+.btn-primary:hover{background:#333}
+.btn-danger{color:#dc2626;border:none;background:transparent;cursor:pointer;font-size:12px;padding:4px}
+.edit-btn{color:#888;border:1px solid #e5e2db;background:transparent;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
+.edit-btn:hover{background:#f8f7f4;color:#1a1916}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:15px;font-weight:600;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{background:none;border:none;cursor:pointer;font-size:20px;color:#888;line-height:1}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;color:#888;margin-bottom:4px}
+.field input,.field select,.field textarea{width:100%;border:1px solid #e5e2db;border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff;color:#1a1916}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#888}
+.mono{font-family:monospace;font-size:11px}
+.empty{text-align:center;padding:40px;color:#aaa;font-size:13px}
+.progress-wrap{display:flex;align-items:center;gap:8px;min-width:110px}
+.progress-bar{flex:1;height:5px;background:#f0ede8;border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px}
+.no-tag{color:#ccc;font-style:italic;font-size:11px}
+.search-input{border:1px solid #e5e2db;border-radius:8px;padding:6px 10px;font-size:12px;width:160px;margin-left:auto}
+.saving{position:fixed;bottom:16px;right:16px;background:#1a1916;color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;z-index:200}
+.alert-row{background:#fffbeb;border-left:3px solid #d97706}
+.alert-row.danger{background:#fff5f5;border-left-color:#dc2626}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
+const MASTER_KEY = '$2a$10$placeholder'; // replaced at runtime from settings
+
+const COMPANIES = ['IPS','Bison','Bigfoot','Big Bear'];
+
+function daysUntil(str) {
+  if (!str) return null;
+  const d = new Date(str); if (isNaN(d)) return null;
+  const t = new Date(); t.setHours(0,0,0,0);
+  return Math.round((d - t) / 86400000);
+}
+function tagColor(days) {
+  if (days === null) return 'gray';
+  if (days < 0 || days <= 30) return 'danger';
+  if (days <= 90) return 'warn';
+  return 'ok';
+}
+function nextSvc(hours) {
+  const cps = [500,1000,2000], cycle = hours % 2000;
+  for (const cp of cps) if (cycle < cp) return { next: cp, rem: Math.round(cp - cycle), prev: cps[cps.indexOf(cp)-1]||0 };
+  return { next: 2000, rem: Math.round(2000 - cycle), prev: 1000 };
+}
+function liftColor(rem) { return rem <= 50 ? 'danger' : rem <= 100 ? 'warn' : 'ok'; }
+function fmtDate(str) {
+  if (!str) return '—';
+  const d = new Date(str); if (isNaN(d)) return str;
+  return d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+}
+function uid(p='id') { return p + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+const INIT_TRUCKS = [
+  {id:'t1',company:'IPS',year:'2008',model:'F-150',vin:'1ETRX12W68KD25567',miles:26168,tag:'KCP-726',tagExp:'2027-02-01',insurance:'',state:'OK',notes:''},
+  {id:'t2',company:'IPS',year:'2008',model:'Ram (Flat Bed)',vin:'307MX49A38G147748',miles:186118,tag:'LYR-194',tagExp:'2027-11-01',insurance:'',state:'OK',notes:''},
+  {id:'t3',company:'IPS',year:'2003',model:'Chevy',vin:'1GCE14V132197009',miles:134501,tag:'',tagExp:'',insurance:'',state:'OK',notes:''},
+  {id:'t4',company:'IPS',year:'2001',model:'GMC',vin:'1G1HK291X1E22833',miles:210176,tag:'',tagExp:'',insurance:'',state:'OK',notes:''},
+  {id:'t5',company:'IPS',year:'2001',model:'Ram (Ghost)',vin:'3B6KE26211M583800',miles:93380,tag:'AIV-231',tagExp:'2024-03-01',insurance:'',state:'OK',notes:''},
+  {id:'t6',company:'IPS',year:'1999',model:'Expedition',vin:'1FMRU17L6XLB54787',miles:0,tag:'AIU-623',tagExp:'',insurance:'',state:'OK',notes:''},
+  {id:'t7',company:'Bison',year:'2002',model:'Dodge Dakota',vin:'1B7GG42XX2S579954',miles:121486,tag:'2J86519',tagExp:'2028-01-01',insurance:'',state:'ID',notes:''},
+  {id:'t8',company:'Bison',year:'2023',model:'Honda Pioneer SXS700',vin:'1MFUE0292P4802691',miles:2085,tag:'',tagExp:'',insurance:'',state:'',notes:''},
+  {id:'t9',company:'Bison',year:'2017',model:'Dodge Ram 3500',vin:'3C63R3GJ7HG775722',miles:31811,tag:'KX7110',tagExp:'2028-01-01',insurance:'',state:'ID',notes:''},
+  {id:'t10',company:'Bison',year:'2016',model:'Ford F350',vin:'1FT8W3DT1GD21811',miles:86695,tag:'YK2600',tagExp:'2022-12-01',insurance:'',state:'ID',notes:''},
+  {id:'t11',company:'Bigfoot',year:'2014',model:'Ford F250',vin:'1FT7X2B60EEB4214',miles:0,tag:'',tagExp:'',insurance:'',state:'',notes:''},
+  {id:'t12',company:'Big Bear',year:'1997',model:'Chevy 2500',vin:'1GCGC24R0VZ163745',miles:246183,tag:'46387',tagExp:'',insurance:'',state:'',notes:''},
+  {id:'t13',company:'Big Bear',year:'1986',model:'Water Truck',vin:'1HTLDMJN5GHA14075',miles:300620,tag:'',tagExp:'',insurance:'',state:'',notes:''},
+];
+
+const INIT_LIFTS = [
+  {id:'l1',company:'IPS',model:'Volvo L120L',serial:'VCEL120GE0030338',hours:12288,value:'85-115',notes:''},
+  {id:'l2',company:'IPS',model:'Volvo L120H',serial:'VCEL120HJE0014258',hours:8878,value:'165-210',notes:''},
+  {id:'l3',company:'IPS',model:'Volvo L110H',serial:'VCEL110HT05631596',hours:7052,value:'170-200',notes:''},
+  {id:'l4',company:'IPS',model:'Volvo L110',serial:'VCEL110HJ05631439',hours:2763,value:'120-150',notes:''},
+  {id:'l5',company:'IPS',model:'Volvo L90',serial:'VCEL90G05617081',hours:10917,value:'80-100',notes:''},
+  {id:'l6',company:'IPS',model:'Volvo L30',serial:'VCEL30HSC00320233',hours:195,value:'60-75',notes:''},
+  {id:'l7',company:'IPS',model:'CAT 930H',serial:'CAT0930HEDHC00880',hours:7353,value:'60-75',notes:''},
+  {id:'l8',company:'IPS',model:'Kubota Tractor',serial:'46806',hours:461,value:'14-22',notes:''},
+  {id:'l9',company:'Bison',model:'Bobcat S250',serial:'530913850',hours:8227,value:'15-22',notes:''},
+  {id:'l10',company:'Bison',model:'Volvo L70F',serial:'L70FV61956',hours:20823,value:'35-50',notes:''},
+  {id:'l11',company:'Bison',model:'Volvo L90 #1',serial:'VCEOL90HK0S623450',hours:8602,value:'95-115',notes:''},
+  {id:'l12',company:'Bison',model:'Volvo L90 #2',serial:'VCE0L90HP0S623463',hours:6902,value:'105-125',notes:''},
+  {id:'l13',company:'Bison',model:'Volvo L110 #3',serial:'VCEL110HJ0S631991',hours:2548,value:'155-185',notes:''},
+  {id:'l14',company:'Bison',model:'Case 821E',serial:'N8F204828',hours:7183,value:'85-105',notes:''},
+  {id:'l15',company:'Bigfoot',model:'Taylor T360L',serial:'SBG33150',hours:14657,value:'',notes:''},
+  {id:'l16',company:'Bigfoot',model:'CAT 3600',serial:'T40A-0076',hours:22523,value:'',notes:''},
+  {id:'l17',company:'Bigfoot',model:'CAT P3300',serial:'T39A-10708',hours:4796,value:'',notes:''},
+  {id:'l18',company:'Big Bear',model:'Nissan (2010)',serial:'MUG1F2A30LV',hours:2252,value:'',notes:''},
+  {id:'l19',company:'Big Bear',model:'Mitsubishi (2010)',serial:'AF13F10582',hours:7212,value:'',notes:''},
+  {id:'l20',company:'Big Bear',model:'Yale (2012)',serial:'E8877E01523J',hours:16600,value:'',notes:''},
+  {id:'l21',company:'Big Bear',model:'Hoist (2015)',serial:'30164',hours:4863,value:'',notes:''},
+  {id:'l22',company:'Big Bear',model:'CAT P2200 (2011)',serial:'T36A-10460',hours:4947,value:'',notes:''},
+  {id:'l23',company:'Big Bear',model:'EZGO Cart 2-seat (1997)',serial:'2SEATER-1997',hours:0,value:'',notes:''},
+  {id:'l24',company:'Big Bear',model:'EZGO Cart 4-seat (2019)',serial:'4SEATER-2019',hours:0,value:'',notes:''},
+  {id:'l25',company:'Big Bear',model:'EZGO Cart 2-seat (2019)',serial:'2SEATER-2019',hours:0,value:'',notes:''},
+];
+
+// ── Badge ────────────────────────────────────────────────────────────────────
+function Badge({color, children}) {
+  const cls = {ok:'badge badge-ok',warn:'badge badge-warn',danger:'badge badge-danger',gray:'badge badge-gray'};
+  return <span className={cls[color]||'badge badge-gray'}>{children}</span>;
+}
+
+// ── Truck Form ───────────────────────────────────────────────────────────────
+function TruckForm({init, onSave, onDelete}) {
+  const [f, setF] = useState({company:'IPS',year:'',model:'',vin:'',miles:'',tag:'',tagExp:'',insurance:'',state:'',notes:'',...init});
+  const s = (k,v) => setF(p=>({...p,[k]:v}));
+  return (
+    <div>
+      <div className="form-grid">
+        <div className="field"><label>Company</label>
+          <select value={f.company} onChange={e=>s('company',e.target.value)}>{COMPANIES.map(c=><option key={c}>{c}</option>)}</select></div>
+        <div className="field"><label>Year</label><input value={f.year} onChange={e=>s('year',e.target.value)} placeholder="2024"/></div>
+      </div>
+      <div className="field"><label>Make / Model *</label><input value={f.model} onChange={e=>s('model',e.target.value)} placeholder="Ford F-250"/></div>
+      <div className="field"><label>VIN #</label><input className="mono" value={f.vin} onChange={e=>s('vin',e.target.value)} placeholder="1FTFW1ET0EFC00001"/></div>
+      <div className="form-grid">
+        <div className="field"><label>Miles</label><input type="number" value={f.miles} onChange={e=>s('miles',e.target.value)} placeholder="50000"/></div>
+        <div className="field"><label>State</label><input value={f.state} onChange={e=>s('state',e.target.value)} placeholder="OK"/></div>
+      </div>
+      <hr style={{border:'none',borderTop:'1px solid #f0ede8',margin:'8px 0 12px'}}/>
+      <div className="form-grid">
+        <div className="field"><label>Tag #</label><input value={f.tag} onChange={e=>s('tag',e.target.value)} placeholder="ABC-123"/></div>
+        <div className="field"><label>Tag expiration</label><input type="month" value={f.tagExp?f.tagExp.slice(0,7):''} onChange={e=>s('tagExp',e.target.value?e.target.value+'-01':'')}/></div>
+      </div>
+      <div className="field"><label>Insurance renewal</label><input type="month" value={f.insurance?f.insurance.slice(0,7):''} onChange={e=>s('insurance',e.target.value?e.target.value+'-01':'')}/></div>
+      <div className="field"><label>Notes</label><textarea rows={2} value={f.notes} onChange={e=>s('notes',e.target.value)} placeholder="Any notes…"/></div>
+      <button className="btn btn-primary" style={{width:'100%',justifyContent:'center',marginBottom:8}}
+        onClick={()=>{ if(!f.model.trim()) return alert('Enter a make/model.'); onSave({...f,miles:parseInt(f.miles)||0}); }}>
+        {f.id?'Save changes':'Add truck'}
+      </button>
+      {onDelete && <button className="btn-danger" style={{width:'100%',textAlign:'center',padding:'6px'}} onClick={onDelete}>Remove this truck</button>}
+    </div>
+  );
+}
+
+// ── Lift Form ────────────────────────────────────────────────────────────────
+function LiftForm({init, onSave, onDelete}) {
+  const [f, setF] = useState({company:'IPS',model:'',serial:'',hours:'',value:'',notes:'',...init});
+  const s = (k,v) => setF(p=>({...p,[k]:v}));
+  return (
+    <div>
+      <div className="field"><label>Company</label>
+        <select value={f.company} onChange={e=>s('company',e.target.value)}>{COMPANIES.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="field"><label>Make / Model *</label><input value={f.model} onChange={e=>s('model',e.target.value)} placeholder="Volvo L90"/></div>
+      <div className="field"><label>Serial #</label><input className="mono" value={f.serial} onChange={e=>s('serial',e.target.value)}/></div>
+      <div className="form-grid">
+        <div className="field"><label>Current hours</label><input type="number" value={f.hours} onChange={e=>s('hours',e.target.value)}/></div>
+        <div className="field"><label>Value ($K range)</label><input value={f.value} onChange={e=>s('value',e.target.value)} placeholder="80-100"/></div>
+      </div>
+      <div className="field"><label>Notes</label><textarea rows={2} value={f.notes} onChange={e=>s('notes',e.target.value)} placeholder="Any notes…"/></div>
+      <button className="btn btn-primary" style={{width:'100%',justifyContent:'center',marginBottom:8}}
+        onClick={()=>{ if(!f.model.trim()) return alert('Enter a make/model.'); onSave({...f,hours:parseFloat(f.hours)||0}); }}>
+        {f.id?'Save changes':'Add lift / loader'}
+      </button>
+      {onDelete && <button className="btn-danger" style={{width:'100%',textAlign:'center',padding:'6px'}} onClick={onDelete}>Remove this lift / loader</button>}
+    </div>
+  );
+}
+
+// ── Settings Form ────────────────────────────────────────────────────────────
+function SettingsForm({cfg, onSave}) {
+  const [f, setF] = useState(cfg);
+  return (
+    <div>
+      <p style={{fontSize:12,color:'#888',marginBottom:16,lineHeight:1.6}}>
+        To share data across all users, create a free account at <strong>jsonbin.io</strong>, get your Master Key and Bin ID, and enter them below. Without this, data only saves on your browser.
+      </p>
+      <div className="field"><label>JSONBin Master Key</label><input value={f.key||''} onChange={e=>setF(p=>({...p,key:e.target.value}))} placeholder="$2a$10$..."/></div>
+      <div className="field"><label>JSONBin Bin ID</label><input value={f.binId||''} onChange={e=>setF(p=>({...p,binId:e.target.value}))} placeholder="64a1b2c3d4e5f6..."/></div>
+      <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={()=>onSave(f)}>Save settings</button>
+    </div>
+  );
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function Modal({title, onClose, children}) {
+  return (
+    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="modal">
+        <div className="modal-title">{title}<button className="modal-close" onClick={onClose}>✕</button></div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+function Dashboard({trucks, lifts, co}) {
+  const ft = trucks.filter(t=>co==='All'||t.company===co);
+  const fl = lifts.filter(l=>co==='All'||l.company===co);
+  const tagAlert = ft.filter(t=>{const d=daysUntil(t.tagExp);return d!==null&&d<=90;});
+  const insAlert = ft.filter(t=>{const d=daysUntil(t.insurance);return d!==null&&d<=90;});
+  const liftAlert = fl.filter(l=>nextSvc(l.hours).rem<=100);
+  const noTag = ft.filter(t=>!t.tag);
+
+  const rows = [];
+  tagAlert.forEach(t=>{const d=daysUntil(t.tagExp);rows.push({u:d,co:t.company,label:t.model,type:'Registration',status:d<0?`Expired ${Math.abs(d)}d ago`:`Expires in ${d}d`,danger:d<=30,ref:t.tag});});
+  insAlert.forEach(t=>{const d=daysUntil(t.insurance);rows.push({u:d,co:t.company,label:t.model,type:'Insurance',status:d<0?`Expired ${Math.abs(d)}d ago`:`Expires in ${d}d`,danger:d<=30,ref:'—'});});
+  liftAlert.forEach(l=>{const s=nextSvc(l.hours);rows.push({u:s.rem,co:l.company,label:l.model,type:`${s.next}h Service`,status:`${s.rem}h remaining`,danger:s.rem<=50,ref:l.serial});});
+  rows.sort((a,b)=>a.u-b.u);
+
+  return (
+    <div>
+      <div className="metrics">
+        {[
+          {label:'Total trucks',val:ft.length,cls:''},
+          {label:'Tags expiring soon',val:tagAlert.length,cls:tagAlert.length?'amber':''},
+          {label:'Insurance renewals',val:insAlert.length,cls:insAlert.length?'amber':''},
+          {label:'No tag on file',val:noTag.length,cls:noTag.length?'red':''},
+          {label:'Total equipment',val:fl.length,cls:''},
+          {label:'Service due soon',val:liftAlert.length,cls:liftAlert.length?'amber':''},
+        ].map(m=>(
+          <div key={m.label} className="metric">
+            <div className="metric-label">{m.label}</div>
+            <div className={`metric-val ${m.cls}`}>{m.val}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <div className="card-header"><span className="card-title">Alerts &amp; upcoming</span></div>
+        {rows.length===0
+          ? <div className="empty">✓ No urgent alerts — everything looks good</div>
+          : <div style={{overflowX:'auto'}}><table>
+              <thead><tr><th>Company</th><th>Vehicle / Equipment</th><th>Type</th><th>Status</th><th>Ref</th></tr></thead>
+              <tbody>{rows.map((r,i)=>(
+                <tr key={i} className={`alert-row${r.danger?' danger':''}`}>
+                  <td>{r.co}</td><td>{r.label}</td><td style={{color:'#888'}}>{r.type}</td>
+                  <td><Badge color={r.danger?'danger':'warn'}>{r.status}</Badge></td>
+                  <td className="mono">{r.ref}</td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Trucks Tab ───────────────────────────────────────────────────────────────
+function TrucksTab({trucks, co, search, onEdit, onAdd}) {
+  const list = trucks
+    .filter(t=>co==='All'||t.company===co)
+    .filter(t=>!search||[t.model,t.vin,t.tag,t.company].some(v=>(v||'').toLowerCase().includes(search)));
+  return (
+    <div className="card">
+      <div className="card-header">
+        <span className="card-title">Trucks ({list.length})</span>
+        <button className="btn" onClick={onAdd}>+ Add truck</button>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table>
+          <thead><tr><th>Co.</th><th>Year</th><th>Make / Model</th><th>VIN</th><th>Miles</th><th>Tag</th><th>Tag expires</th><th>Insurance</th><th>State</th><th></th></tr></thead>
+          <tbody>
+            {list.length===0 && <tr><td colSpan={10}><div className="empty">No trucks found</div></td></tr>}
+            {list.map(t=>{
+              const td=daysUntil(t.tagExp), tc=tagColor(td);
+              const id=daysUntil(t.insurance), ic=tagColor(id);
+              return (
+                <tr key={t.id}>
+                  <td>{t.company}</td>
+                  <td style={{color:'#888'}}>{t.year}</td>
+                  <td style={{fontWeight:500}}>{t.model}</td>
+                  <td className="mono">{t.vin||'—'}</td>
+                  <td>{t.miles?Number(t.miles).toLocaleString():'—'}</td>
+                  <td>{t.tag?<Badge color={tc}>{t.tag}</Badge>:<span className="no-tag">No tag</span>}</td>
+                  <td style={{fontSize:11,color:'#888'}}>{fmtDate(t.tagExp)}</td>
+                  <td>{t.insurance?<Badge color={ic}>{fmtDate(t.insurance)}</Badge>:<button className="btn" style={{fontSize:11,padding:'2px 8px'}} onClick={()=>onEdit(t)}>+ Add</button>}</td>
+                  <td style={{color:'#888'}}>{t.state||'—'}</td>
+                  <td><button className="edit-btn" onClick={()=>onEdit(t)}>Edit</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Lifts Tab ────────────────────────────────────────────────────────────────
+function LiftsTab({lifts, co, search, onEdit, onAdd}) {
+  const list = lifts
+    .filter(l=>co==='All'||l.company===co)
+    .filter(l=>!search||[l.model,l.serial,l.company].some(v=>(v||'').toLowerCase().includes(search)));
+  return (
+    <div className="card">
+      <div className="card-header">
+        <span className="card-title">Lifts &amp; Loaders ({list.length})</span>
+        <button className="btn" onClick={onAdd}>+ Add lift</button>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table>
+          <thead><tr><th>Co.</th><th>Make / Model</th><th>Serial #</th><th>Hours</th><th>Next service</th><th>Hours left</th><th>Status</th><th>Value ($K)</th><th></th></tr></thead>
+          <tbody>
+            {list.length===0 && <tr><td colSpan={9}><div className="empty">No equipment found</div></td></tr>}
+            {list.map(l=>{
+              const svc=nextSvc(l.hours), color=liftColor(svc.rem);
+              const span=svc.next-svc.prev, pct=Math.round(((span-svc.rem)/span)*100);
+              const barColor=color==='ok'?'#4ade80':color==='warn'?'#fbbf24':'#f87171';
+              return (
+                <tr key={l.id}>
+                  <td>{l.company}</td>
+                  <td style={{fontWeight:500}}>{l.model}</td>
+                  <td className="mono">{l.serial}</td>
+                  <td>{Number(l.hours).toLocaleString()}h</td>
+                  <td style={{color:'#888'}}>{svc.next}h</td>
+                  <td>
+                    <div className="progress-wrap">
+                      <span style={{fontSize:11,minWidth:32}}>{svc.rem}h</span>
+                      <div className="progress-bar"><div className="progress-fill" style={{width:pct+'%',background:barColor}}/></div>
+                    </div>
+                  </td>
+                  <td><Badge color={color}>{color==='ok'?'OK':color==='warn'?'Due soon':'Urgent'}</Badge></td>
+                  <td style={{color:'#888'}}>{l.value||'—'}</td>
+                  <td><button className="edit-btn" onClick={()=>onEdit(l)}>Edit</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [trucks, setTrucks] = useState([]);
+  const [lifts,  setLifts]  = useState([]);
+  const [cfg,    setCfg]    = useState({key:'',binId:''});
+  const [tab,    setTab]    = useState('dashboard');
+  const [co,     setCo]     = useState('All');
+  const [search, setSearch] = useState('');
+  const [modal,  setModal]  = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // Load from JSONBin or localStorage
+  useEffect(()=>{
+    const savedCfg = JSON.parse(localStorage.getItem('fleet_cfg')||'{}');
+    setCfg(savedCfg);
+    if (savedCfg.key && savedCfg.binId) {
+      fetch(`${JSONBIN_BASE}/b/${savedCfg.binId}/latest`,{headers:{'X-Master-Key':savedCfg.key}})
+        .then(r=>r.json()).then(data=>{
+          if (data.record) {
+            setTrucks(data.record.trucks||INIT_TRUCKS);
+            setLifts(data.record.lifts||INIT_LIFTS);
+          } else { setTrucks(INIT_TRUCKS); setLifts(INIT_LIFTS); }
+          setLoaded(true);
+        }).catch(()=>{ setTrucks(INIT_TRUCKS); setLifts(INIT_LIFTS); setLoaded(true); });
+    } else {
+      const lt = JSON.parse(localStorage.getItem('fleet_trucks')||'null');
+      const ll = JSON.parse(localStorage.getItem('fleet_lifts')||'null');
+      setTrucks(lt||INIT_TRUCKS); setLifts(ll||INIT_LIFTS); setLoaded(true);
+    }
+  },[]);
+
+  const persist = useCallback(async (t, l, c) => {
+    setSaving(true);
+    const savedCfg = c || cfg;
+    if (savedCfg.key && savedCfg.binId) {
+      try {
+        await fetch(`${JSONBIN_BASE}/b/${savedCfg.binId}`,{
+          method:'PUT', headers:{'Content-Type':'application/json','X-Master-Key':savedCfg.key},
+          body: JSON.stringify({trucks:t, lifts:l})
+        });
+      } catch(e) { console.error(e); }
+    } else {
+      localStorage.setItem('fleet_trucks', JSON.stringify(t));
+      localStorage.setItem('fleet_lifts',  JSON.stringify(l));
+    }
+    setSaving(false);
+  }, [cfg]);
+
+  const saveTruck = async (truck) => {
+    let next;
+    if (trucks.find(t=>t.id===truck.id)) next = trucks.map(t=>t.id===truck.id?truck:t);
+    else next = [...trucks, {...truck, id:uid('t')}];
+    setTrucks(next); setModal(null); await persist(next, lifts);
+  };
+  const delTruck = async (id) => {
+    if(!confirm('Remove this truck?')) return;
+    const next = trucks.filter(t=>t.id!==id);
+    setTrucks(next); setModal(null); await persist(next, lifts);
+  };
+  const saveLift = async (lift) => {
+    let next;
+    if (lifts.find(l=>l.id===lift.id)) next = lifts.map(l=>l.id===lift.id?lift:l);
+    else next = [...lifts, {...lift, id:uid('l')}];
+    setLifts(next); setModal(null); await persist(trucks, next);
+  };
+  const delLift = async (id) => {
+    if(!confirm('Remove this lift / loader?')) return;
+    const next = lifts.filter(l=>l.id!==id);
+    setLifts(next); setModal(null); await persist(trucks, next);
+  };
+  const saveCfg = async (newCfg) => {
+    localStorage.setItem('fleet_cfg', JSON.stringify(newCfg));
+    setCfg(newCfg); setModal(null);
+    await persist(trucks, lifts, newCfg);
+  };
+
+  if (!loaded) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'#888'}}>Loading fleet data…</div>;
+
+  return (
+    <div>
+      <div className="topbar">
+        <span className="app-title">🚚 Fleet Tracker</span>
+        {['All',...COMPANIES].map(c=>(
+          <button key={c} className={`filter-btn${co===c?' active':''}`} onClick={()=>setCo(c)}>{c}</button>
+        ))}
+        <input className="search-input" placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value.toLowerCase())}/>
+        <button className="btn" style={{marginLeft:4}} onClick={()=>setModal({type:'settings'})}>⚙ Settings</button>
+      </div>
+      <div className="tabs">
+        {[['dashboard','Dashboard'],['trucks','Trucks'],['lifts','Lifts & Loaders']].map(([id,label])=>(
+          <button key={id} className={`tab${tab===id?' active':''}`} onClick={()=>setTab(id)}>{label}</button>
+        ))}
+      </div>
+      <div className="content">
+        {tab==='dashboard' && <Dashboard trucks={trucks} lifts={lifts} co={co}/>}
+        {tab==='trucks'    && <TrucksTab trucks={trucks} co={co} search={search} onEdit={t=>setModal({type:'editTruck',data:t})} onAdd={()=>setModal({type:'addTruck'})}/>}
+        {tab==='lifts'     && <LiftsTab  lifts={lifts}  co={co} search={search} onEdit={l=>setModal({type:'editLift',data:l})}  onAdd={()=>setModal({type:'addLift'})}/>}
+      </div>
+
+      {saving && <div className="saving">Saving…</div>}
+
+      {modal?.type==='addTruck'   && <Modal title="Add truck"          onClose={()=>setModal(null)}><TruckForm init={{}} onSave={saveTruck}/></Modal>}
+      {modal?.type==='editTruck'  && <Modal title="Edit truck"         onClose={()=>setModal(null)}><TruckForm init={modal.data} onSave={saveTruck} onDelete={()=>delTruck(modal.data.id)}/></Modal>}
+      {modal?.type==='addLift'    && <Modal title="Add lift / loader"  onClose={()=>setModal(null)}><LiftForm  init={{}} onSave={saveLift}/></Modal>}
+      {modal?.type==='editLift'   && <Modal title="Edit lift / loader" onClose={()=>setModal(null)}><LiftForm  init={modal.data} onSave={saveLift} onDelete={()=>delLift(modal.data.id)}/></Modal>}
+      {modal?.type==='settings'   && <Modal title="Settings"           onClose={()=>setModal(null)}><SettingsForm cfg={cfg} onSave={saveCfg}/></Modal>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
